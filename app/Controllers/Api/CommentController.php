@@ -4,6 +4,7 @@ namespace App\Controllers\Api;
 
 use App\Middleware\UuidMiddleware;
 use App\Repositories\CommentContract;
+use App\Repositories\GuestContract;
 use App\Repositories\LikeContract;
 use App\Request\InsertCommentRequest;
 use App\Response\JsonResponse;
@@ -17,12 +18,14 @@ use Throwable;
 class CommentController extends Controller
 {
     private $comment;
+    private $guest;
     private $json;
 
-    public function __construct(CommentContract $comment, JsonResponse $json)
+    public function __construct(CommentContract $comment, GuestContract $guest, JsonResponse $json)
     {
         $this->json = $json;
         $this->comment = $comment;
+        $this->guest = $guest;
     }
 
     private function getTenorUrl(string $id): string|null
@@ -175,9 +178,13 @@ class CommentController extends Controller
             return $this->json->errorBadRequest(['Comment or GIF must be provided']);
         }
 
-        $status = $comment->only(['id', 'presence', 'comment', 'gif_url'])
+        $status = $comment->only(['id', 'guest_id', 'presence', 'comment', 'gif_url'])
             ->fill($valid->only(['presence', 'comment', 'gif_url']))
             ->save();
+
+        if ($status === 1 && $comment->guest_id !== null && $valid->get('presence') !== null) {
+            $this->guest->updatePresence(intval($comment->guest_id), boolval($valid->get('presence')));
+        }
 
         if ($status === 1) {
             return $this->json->successStatusTrue();
@@ -218,12 +225,32 @@ class CommentController extends Controller
             return $this->json->errorBadRequest(['Comment or GIF must be provided']);
         }
 
+        $guestId = null;
+        if ($valid->get('guest_token') !== null) {
+            $guestToken = $valid->get('guest_token');
+            if (!preg_match('/\A[a-f0-9]{64}\z/D', $guestToken)) {
+                return $this->json->errorNotFound();
+            }
+
+            $guest = $this->guest->getByToken($guestToken);
+            if (!$guest->exist() || intval($guest->user_id) !== Auth::id()) {
+                return $this->json->errorNotFound();
+            }
+
+            $guestId = intval($guest->id);
+        }
+
         $comment = $this->comment->create([
-            ...$valid->except(['id']),
+            ...$valid->except(['id', 'guest_token']),
             'user_id' => Auth::id(),
+            'guest_id' => $guestId,
             'parent_id' => $valid->id,
             'is_admin' => Auth::user()->isAdmin()
         ]);
+
+        if ($guestId !== null && $valid->get('presence') !== null) {
+            $this->guest->updatePresence($guestId, boolval($valid->get('presence')));
+        }
 
         return $this->json->success(
             $comment->only(['name', 'presence', 'comment', 'uuid', 'own', 'gif_url', 'created_at']),

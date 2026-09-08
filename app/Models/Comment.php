@@ -10,6 +10,7 @@ final class Comment extends Model
 
     protected $fillable = [
         'user_id',
+        'guest_id',
         'name',
         'presence',
         'comment',
@@ -27,4 +28,9 @@ final class Comment extends Model
         'is_admin' => 'bool',
         'created_at' => 'datetime:diff'
     ];
+
+    public function guest(): Model
+    {
+        return Guest::where('id', $this->guest_id)->limit(1)->first();
+    }
 }

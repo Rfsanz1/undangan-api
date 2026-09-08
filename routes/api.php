@@ -3,6 +3,7 @@
 use App\Controllers\Api\AuthController;
 use App\Controllers\Api\CommentController;
 use App\Controllers\Api\DashboardController;
+use App\Controllers\Api\GuestController;
 use App\Middleware\AuthMiddleware;
 use App\Middleware\DashboardMiddleware;
 use App\Middleware\RateLimitMiddleware;
@@ -18,10 +19,24 @@ Route::middleware(RateLimitMiddleware::class)->prefix('/session')->group(functio
     Route::options('/'); // Preflight request [/api/session]
 });
 
+Route::middleware(RateLimitMiddleware::class)->group(function () {
+    Route::get('/v2/guest/{token}', [GuestController::class, 'public']);
+    Route::options('/v2/guest/{token}');
+});
+
 Route::middleware([RateLimitMiddleware::class, AuthMiddleware::class])->group(function () {
 
     // Dashboard
     Route::middleware(DashboardMiddleware::class)->group(function () {
+        Route::get('/guests', [GuestController::class, 'index']);
+        Route::post('/guests', [GuestController::class, 'create']);
+        Route::options('/guests');
+
+        Route::get('/guests/{uuid}', [GuestController::class, 'show']);
+        Route::patch('/guests/{uuid}', [GuestController::class, 'update']);
+        Route::delete('/guests/{uuid}', [GuestController::class, 'destroy']);
+        Route::options('/guests/{uuid}');
+
         Route::get('/download', [DashboardController::class, 'download']);
         Route::options('/download');
 
